@@ -27,9 +27,26 @@ SECRET_KEY = 'django-insecure-g^!cy9e^tek^dts-($t+w3inu$4%!=34b-35ry-ui@-95n$sal
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
-CORS_ORIGIN_ALLOW_ALL =True
-CORS_ALLOW_METHODS =[
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    ".onrender.com",           # Allows Render subdomains
+    "filmingo.online",
+    "www.filmingo.online",
+]
+
+# CORS Configuration
+CORS_ORIGIN_ALLOW_ALL = False  # Changed to False for better security in production
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://filmingo.online",
+    "https://www.filmingo.online",
+    # Note: If your Vercel app creates dynamic URLs (like feature branches), 
+    # you might want to specify those, or revert to CORS_ORIGIN_ALLOW_ALL = True if needed.
+]
+
+CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
     "OPTIONS",

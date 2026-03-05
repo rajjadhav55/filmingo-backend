@@ -31,3 +31,4 @@ requests
 python-dotenv
 cinemagoer
 beautifulsoup4
+dj-database-url
