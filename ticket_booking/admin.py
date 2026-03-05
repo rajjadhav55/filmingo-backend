@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Movie, Theater, Show, Seat, Bookinginfo , Genre, Language , State , City , ShowSeatBooking ,Session, customUser , OTPStorage
+from .models import Movie, Theater, Show, Seat, Bookinginfo , Genre, Language , State , City , ShowSeatBooking ,Session, customUser ,  OTPStorage , ingredients, Review, Turf, TurfBooking
 from django.utils.html import format_html
 
 class TheaterAdmin(admin.ModelAdmin):
@@ -9,6 +9,7 @@ class CostumUserAdmin(admin.ModelAdmin):
     list_display = ('id','username', 'email', 'first_name', 'last_name', 'contact_no', 'is_admin','is_staff')
     search_fields = ('username', 'email')
     list_filter = ('is_admin',)
+    
     
     
 
@@ -78,6 +79,23 @@ class SessionAdmin(admin.ModelAdmin):
 class OTPstorageAdmin(admin.ModelAdmin):
     list_display = ('id','email','created_at','otp','counter','is_expired')
 
+class ingredientAdmin(admin.ModelAdmin):
+    list_display =('id','name','category','quantity','price')
+
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ("id", "movie", "user", "rating", "created_at", "updated_at")
+    list_filter = ("rating", "created_at")
+    search_fields = ("movie__title", "user__username", "comment")
+
+class TurfAdmin(admin.ModelAdmin):
+    list_display = ('id', 'osm_id', 'name', 'location')
+    search_fields = ('name', 'osm_id', 'location')
+
+class TurfBookingAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'turf', 'location', 'booking_date', 'time_slot', 'total_price', 'created_at')
+    list_filter = ('booking_date', 'turf')
+    search_fields = ('user__username', 'turf__name', 'time_slot')
+
 
 
 
@@ -99,3 +117,7 @@ admin.site.register(ShowSeatBooking,ShowSeatBookingAdmin)
 admin.site.register(Session,SessionAdmin)
 admin.site.register(customUser,CostumUserAdmin)
 admin.site.register(OTPStorage,OTPstorageAdmin)
+admin.site.register(ingredients,ingredientAdmin)
+admin.site.register(Review, ReviewAdmin)
+admin.site.register(Turf, TurfAdmin)
+admin.site.register(TurfBooking, TurfBookingAdmin)

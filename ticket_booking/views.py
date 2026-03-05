@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.shortcuts import  render
 from django.db.models import Min , F
 from django.core.mail import send_mail
+from email.mime.image import MIMEImage
 from email.message import  EmailMessage
 from django.utils.html import format_html
 from django.core.mail import  EmailMessage
@@ -21,13 +22,17 @@ from django.http import JsonResponse ,HttpResponse
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import api_view, permission_classes
-from .models import Theater , Movie , Show , Bookinginfo , Genre , Language ,Seat ,ShowSeatBooking, customUser, Session , OTPStorage , City
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from django.db.models import Avg, Count
+from django.shortcuts import get_object_or_404
+from celery.result import AsyncResult
+from .models import Theater , Movie , Show , Bookinginfo , Genre , Language ,Seat ,ShowSeatBooking, customUser, Session , OTPStorage , City, Review
+from .tasks import generate_movie_recommendations
 
 
 User = get_user_model() 
@@ -122,14 +127,9 @@ def send_otp(request):
         <p style="font-size: 14px; color: #555;">If you did not request this, please ignore this email.</p>
         <div style="border-top: 2px solid #0057ff; margin: 20px auto; width: 60%;"></div>
         <p style="font-size: 16px;">Best regards,</p>
-        <p style="font-size: 18px; font-weight: bold; color: #0057ff;">Team BookMyShow</p>
+        <p style="font-size: 18px; font-weight: bold; color: #0057ff;">Team filming</p>
     </div>
 ''')
-
-
-
-
-
 
 
 
@@ -207,23 +207,26 @@ def register_user(request):
         
         user = User.objects.all()
 
-        if  not contact_no.isdigit():
-            return JsonResponse("contact number should be number only",safe=False)
-        
-        
-        if len(contact_no) != 10:
-            return JsonResponse("Contact number must be exactly 10 digits.",safe=False)
+        # Validate contact number only if provided and not default
+        if contact_no and contact_no not in ['', '0000000000']:
+            if not contact_no.isdigit():
+                return JsonResponse({"error": "Contact number should contain only digits"}, status=400)
+            
+            if len(contact_no) != 10:
+                return JsonResponse({"error": "Contact number must be exactly 10 digits"}, status=400)
+            
+            # Check if contact number already exists
+            if user.filter(contact_no=contact_no).exists():
+                return JsonResponse({"error": f"Mobile number {contact_no} is already registered"}, status=400)
         
         errors=[]
 
         if user.filter(username=username).exists():
-            errors.append(f" {username} is already taken , use a different username.")
-        
-        if  user.filter(contact_no = contact_no).exists():
-            errors.append( f" {contact_no} Mobile number already registered, use a different one.")
+            errors.append(f"{username} is already taken, use a different username.")
         
         if user.filter(email=email).exists():
-            errors.append(f" {email} already registered  , use a different E-mail.")
+            errors.append(f"{email} is already registered, use a different email.")
+        
         if errors:
             return JsonResponse({"errors":errors},status=400)
         
@@ -247,7 +250,8 @@ def register_user(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def movie_list(request):
     title = request.GET.get("title")
     date = request.GET.get("date")
@@ -329,7 +333,8 @@ def movie_list(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def language_list(request):
     languages = request.GET.get("language")
 
@@ -353,7 +358,8 @@ def language_list(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def genre_list (request):
     genres = request.GET.get('genre')
 
@@ -377,7 +383,8 @@ def genre_list (request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def city_list (request):
     city=request.GET.get('city')
     citys = City.objects.all()
@@ -401,7 +408,8 @@ def city_list (request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def theater_list (request):
     if request.method == "GET":
         theater_name= request.GET.get("theater_name")
@@ -527,9 +535,11 @@ def generate_invoice_pdf(request, booking_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def explore(request):
     movie_title = request.GET.get("movie_title")
+    movie_id = request.GET.get("movie_id")
     theater_name = request.GET.get("theater_name")
     location = request.GET.get("location")
     city_name = request.GET.get("city_name")
@@ -560,6 +570,8 @@ def explore(request):
             shows = shows.filter(theater__city__name__icontains=city_name)
         if movie_title:
             shows = shows.filter(movie__title__icontains = movie_title)
+        if movie_id:
+            shows = shows.filter(movie__id = movie_id)
         if language:
             shows = shows.filter(language__name__icontains = language)
         if price1 and price2:
@@ -594,93 +606,128 @@ def explore(request):
 
 @permission_classes([IsAuthenticated])
 @api_view(["POST"])
-# @transaction.atomic
 def initial_booking(request):
     try:
-        
         data = json.loads(request.body)
         user = request.user
         show_id = data.get("show_id")
         seat_numbers = data.get("seat_numbers", [])
-        # action = data.get("action")  # "lock" or "book"
-        # session_id = data.get("session_id")  
+        action = data.get("action", "lock")
+        session_id_str = data.get("session_id")
 
-        if not user or not show_id or not seat_numbers :
+        if not user or not show_id or not seat_numbers:
             return JsonResponse({"error": "Missing or invalid fields"}, status=400)
-        if len(seat_numbers) > 10:
-            return JsonResponse({"error":"can not book seats more than 10."},status=400)
+            
         show = Show.objects.get(id=show_id)
         now = timezone.now()
 
-        show_time=show.time_slot
-        if now > show_time:
-            return JsonResponse({"error": "show is unavailabe"}, status=400)
+        # Relaxed time check for testing/mock data
+        # show_time = show.time_slot
+        # if now > show_time + timedelta(hours=24):
+        #     return JsonResponse({"error" : "show is unavailabe"}, status=400)
         
-    
-        locked_seats = []
-        failed_seats = []
-        new_session = None
-        try:
-            # Check all seats before locking
-            with transaction.atomic():
+        session = None
+        if session_id_str:
+            try:
+                session = Session.objects.get(session_id=session_id_str, user=user)
+            except Session.DoesNotExist:
+                pass
+                
+        if action == "unlock":
+            if session:
                 for seat_num in seat_numbers:
                     try:
                         seat = Seat.objects.get(seat_number=seat_num, theater=show.theater)
-                        existing = ShowSeatBooking.objects.filter(show=show, seat=seat).first()
-
-                        if existing:
-                            if existing.is_booked:
-                                failed_seats.append((seat_num))
-                                raise Exception(f"Seat {seat_num} is already booked")
-                            session = existing.session_id
-                            if (now - session.created_at) < timedelta(minutes=LOCK_EXPIRY_MINUTES):
-                                failed_seats.append((seat_num))
-                                raise Exception(f"Seat {seat_num} is currently locked")
-                                
-                            # If seat is already expired then  delete the old session and lock again
-                            existing.delete()
-                    
-                       
-                        if not new_session:
-                            new_session = Session.objects.create(user=user)
-
-                        ShowSeatBooking.objects.create( show=show,seat=seat,session_id=new_session,is_locked=True )
-                        locked_seats.append(seat_num)
-
+                        ShowSeatBooking.objects.filter(
+                            show=show, seat=seat, session_id=session, is_locked=True, is_booked=False
+                        ).delete()
                     except Seat.DoesNotExist:
-                        failed_seats.append((seat_num, "invalid seat"))
+                        pass
+            return JsonResponse({"success": True, "message": "Seats unlocked"})
 
-                if locked_seats:
-                    return JsonResponse({
-                        
-                        "payment_url" : f"http://127.0.0.1:8000/payment/?session_id={new_session.session_id}",
-                        
-                    })
-                else:
-                    return JsonResponse({"error": "No seats could be locked", "details": failed_seats}, status=400)
+        elif action == "lock":
+            if len(seat_numbers) > 10:
+                return JsonResponse({"error":"can not book seats more than 10."},status=400)
                 
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+            locked_seats = []
+            failed_seats = []
+            
+            try:
+                with transaction.atomic():
+                    if not session:
+                        session = Session.objects.create(user=user)
+                        
+                    for seat_num in seat_numbers:
+                        try:
+                            seat = Seat.objects.get(seat_number=seat_num, theater=show.theater)
+                            existing = ShowSeatBooking.objects.filter(show=show, seat=seat).first()
+
+                            if existing:
+                                if existing.is_booked:
+                                    failed_seats.append((seat_num))
+                                    raise Exception(f"Seat {seat_num} is already booked")
+                                
+                                if (now - existing.session_id.created_at) < timedelta(minutes=LOCK_EXPIRY_MINUTES):
+                                    if existing.session_id == session:
+                                        # Already locked by THIS user in THIS session, ignore
+                                        locked_seats.append(seat_num)
+                                        continue
+                                    else:
+                                        failed_seats.append((seat_num))
+                                        raise Exception(f"Seat {seat_num} is currently locked by someone else")
+                                    
+                                # If seat lock is expired, delete the old lock
+                                existing.delete()
+
+                            ShowSeatBooking.objects.create(show=show, seat=seat, session_id=session, is_locked=True)
+                            locked_seats.append(seat_num)
+
+                        except Seat.DoesNotExist:
+                            failed_seats.append((seat_num, "invalid seat"))
+
+                    if failed_seats:
+                        # Rollback is handled automatically by raising an exception, but we want a custom message
+                        raise Exception("Some seats could not be locked")
+                    
+                    return JsonResponse({
+                        "payment_url": f"http://127.0.0.1:8000/payment/?session_id={session.session_id}",
+                        "session_id": str(session.session_id)
+                    })
+                        
+            except Exception as e:
+                return JsonResponse({"error": str(e), "details": failed_seats}, status=400)
+        
+        else:
+            return JsonResponse({"error": "Invalid action"}, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON format"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
     
 @csrf_exempt
 @require_http_methods(["GET"])
-def payment (request):
-    session_id =request.GET.get('session_id')
-    # user_id = request.GET.get("user_id")
-    # show_id = request.GET.get("show_id")
-    # seat_numbers =request.GET.get("seat_numbers", [])
-    
-    if not session_id:
+def payment(request):
+    session_uuid = request.GET.get('session_id')
+
+    if not session_uuid:
         return JsonResponse({"error": "Session ID is missing"}, status=400)
+
+    try:
+        session = Session.objects.get(session_id=session_uuid)  
+    except Session.DoesNotExist:
+        return JsonResponse({"error": "Invalid session ID"}, status=404)
+
+    bookings = ShowSeatBooking.objects.filter(session_id=session)
+
+    price_per_seat = bookings.first().show.price
+    total_price = bookings.count() * price_per_seat
 
     return JsonResponse({
         "payment_status": "successful",
-        "payment_url" : f"http://127.0.0.1:8000/payment_confirm/?session_id={session_id}",
+        "paid": f"{total_price}/-",
+        "payment_url": f"http://127.0.0.1:8000/payment_confirm/?session_id={session_uuid}",
     })
-
 
 
 
@@ -734,16 +781,16 @@ def payment_confirm(request):
                 booking_info.seats.add(booking.seat)
                 seat_numbers.append(booking.seat.seat_number)
 
-            # Get image URLs
-            image_url = request.build_absolute_uri(booking.show.movie.image.url)
-            stamp_url = request.build_absolute_uri('/media/confirmed-vector-stamp-isolated-on-600nw-1561368712.webp')
+            # Paths for inline images
+            movie_image_path = booking.show.movie.image.path  # absolute path from ImageField
+            stamp_image_path = os.path.join(settings.MEDIA_ROOT, 'booked.png')  # update filename accordingly
 
-            # Render email content
+            # Render HTML with cid references
             html_content = render_to_string('email_ticket.html', {
                 'booking': booking_info,
                 'seat_numbers': seat_numbers,
-                'movie_image_url': image_url,
-                'stamp_image_url': stamp_url,
+                'movie_image_cid': 'movie_image',
+                'stamp_image_cid': 'stamp_image',
                 'total_price': show.price * bookings.count(),
             })
 
@@ -757,6 +804,21 @@ def payment_confirm(request):
                 to=[user.email],
             )
             email.attach_alternative(html_content, "text/html")
+
+            # Attach movie image as inline
+            with open(movie_image_path, 'rb') as f:
+                movie_img = MIMEImage(f.read())
+                movie_img.add_header('Content-ID', '<movie_image>')
+                movie_img.add_header('Content-Disposition', 'inline')
+                email.attach(movie_img)
+
+            # Attach stamp image as inline
+            with open(stamp_image_path, 'rb') as f:
+                stamp_img = MIMEImage(f.read())
+                stamp_img.add_header('Content-ID', '<stamp_image>')
+                stamp_img.add_header('Content-Disposition', 'inline')
+                email.attach(stamp_img)
+
             email.send()
 
             return JsonResponse({
@@ -773,7 +835,8 @@ def payment_confirm(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def retrieve_movie(request, movie_id):
     try:
         movie = Movie.objects.get(id=movie_id)
@@ -792,6 +855,15 @@ def retrieve_movie(request, movie_id):
     for genre in movie.genres.all():
         genres.append(genre.name)
 
+    review_stats = Review.objects.filter(movie=movie).aggregate(
+        avg_rating=Avg("rating"),
+        reviews_count=Count("id"),
+    )
+
+    my_review = None
+    if request.user.is_authenticated:
+        my_review = Review.objects.filter(movie=movie, user=request.user).first()
+
     movie_data = {
         "id": movie.id,
         "title": movie.title,
@@ -801,13 +873,118 @@ def retrieve_movie(request, movie_id):
         "language": languages,
         "genres": genres,
         "image": image_url,
+        "avg_rating": float(review_stats["avg_rating"]) if review_stats["avg_rating"] is not None else None,
+        "reviews_count": int(review_stats["reviews_count"] or 0),
+        "my_review": (
+            {
+                "id": my_review.id,
+                "rating": my_review.rating,
+                "comment": my_review.comment,
+                "created_at": my_review.created_at.isoformat(),
+                "updated_at": my_review.updated_at.isoformat(),
+            }
+            if my_review
+            else None
+        ),
     }
 
     return JsonResponse({"success": True, "movie": movie_data}, status=200)
 
 
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def movie_reviews(request, movie_id):
+    """
+    GET: List reviews for a movie
+    POST: Create or update the authenticated user's review for that movie
+    """
+    movie = get_object_or_404(Movie, id=movie_id)
+
+    if request.method == "GET":
+        reviews_qs = Review.objects.filter(movie=movie).select_related("user").order_by("-created_at")
+        review_stats = reviews_qs.aggregate(
+            avg_rating=Avg("rating"),
+            reviews_count=Count("id"),
+        )
+
+        reviews = []
+        for r in reviews_qs:
+            reviews.append(
+                {
+                    "id": r.id,
+                    "user": getattr(r.user, "username", str(r.user)),
+                    "rating": r.rating,
+                    "comment": r.comment,
+                    "created_at": r.created_at.isoformat(),
+                    "updated_at": r.updated_at.isoformat(),
+                }
+            )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "movie_id": movie.id,
+                "avg_rating": float(review_stats["avg_rating"]) if review_stats["avg_rating"] is not None else None,
+                "reviews_count": int(review_stats["reviews_count"] or 0),
+                "reviews": reviews,
+            }
+        )
+
+    # POST
+    rating = request.data.get("rating")
+    comment = request.data.get("comment", "")
+
+    try:
+        rating_int = int(rating)
+    except (TypeError, ValueError):
+        return JsonResponse({"success": False, "error": "rating must be an integer 1-5"}, status=400)
+
+    if rating_int < 1 or rating_int > 5:
+        return JsonResponse({"success": False, "error": "rating must be between 1 and 5"}, status=400)
+
+    if comment is None:
+        comment = ""
+    if not isinstance(comment, str):
+        return JsonResponse({"success": False, "error": "comment must be a string"}, status=400)
+    if len(comment) > 1000:
+        return JsonResponse({"success": False, "error": "comment max length is 1000"}, status=400)
+
+    review, created = Review.objects.update_or_create(
+        movie=movie,
+        user=request.user,
+        defaults={"rating": rating_int, "comment": comment},
+    )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "created": created,
+            "review": {
+                "id": review.id,
+                "movie_id": movie.id,
+                "rating": review.rating,
+                "comment": review.comment,
+                "created_at": review.created_at.isoformat(),
+                "updated_at": review.updated_at.isoformat(),
+            },
+        },
+        status=201 if created else 200,
+    )
 
 
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_movie_review(request, movie_id, review_id):
+    """
+    Delete a review (only owner or admin/staff).
+    """
+    review = get_object_or_404(Review, id=review_id, movie_id=movie_id)
+
+    if review.user_id != request.user.id and not (getattr(request.user, "is_staff", False) or getattr(request.user, "is_superuser", False)):
+        return JsonResponse({"success": False, "error": "Not allowed"}, status=403)
+
+    review.delete()
+    return JsonResponse({"success": True, "deleted": True})
 
 
 
@@ -876,6 +1053,78 @@ def show_seat_layout(request):
         "show_id": show.id,
         "seats": seat_list
     })
+
+
+@csrf_exempt
+@api_view(["POST"])
+def start_recommendation_task(request):
+    """
+    Start the Celery task for AI-powered movie recommendations.
+
+    Request body (JSON or form-encoded):
+      { "prompt": "I want something dark and gritty like a police procedural" }
+    or:
+      { "mood": "feel-good rom-com" }
+
+    Response (202):
+      {
+        "task_id": "<uuid>",
+        "status_url": "/recommendations/status/<uuid>/"
+      }
+    """
+    # Support both JSON and form-encoded requests
+    if request.content_type == "application/json":
+        try:
+            data = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+        user_prompt = data.get("prompt") or data.get("mood")
+    else:
+        user_prompt = request.POST.get("prompt") or request.POST.get("mood")
+
+    if not user_prompt:
+        return JsonResponse(
+            {"error": "Missing 'prompt' (or 'mood') parameter."},
+            status=400,
+        )
+
+    task = generate_movie_recommendations.delay(user_prompt)
+
+    return JsonResponse(
+        {
+            "task_id": task.id,
+            "status_url": f"/recommendations/status/{task.id}/",
+        },
+        status=202,
+    )
+
+
+@api_view(["GET"])
+def recommendation_task_status(request, task_id):
+    """
+    Poll the status of a recommendation Celery task.
+
+    Response:
+      {
+        "task_id": "...",
+        "state": "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | ...,
+        "result": { ... }   # present only when SUCCESS
+        "error": "..."      # present only when FAILURE
+      }
+    """
+    result = AsyncResult(task_id)
+
+    data = {
+        "task_id": task_id,
+        "state": result.state,
+    }
+
+    if result.state == "SUCCESS":
+        data["result"] = result.result
+    elif result.state == "FAILURE":
+        data["error"] = str(result.result)
+
+    return JsonResponse(data)
 #--------------------------------------------my_bookings-----------------------------------------------------#
 # @login_required
 # def my_bookings(request):

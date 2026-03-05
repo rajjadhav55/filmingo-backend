@@ -12,9 +12,9 @@
         </h2>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
-            <img src="{{ movie_image_url }}" alt="{{ booking.show.movie.title }}" 
+            <img src="cid:movie_image" alt="Movie Poster" 
                  style="width: 180px; border: 3px solid black; border-radius: 10px; margin-right: 30px;">
-            <img src="{{ stamp_image_url }}" alt="Confirmed" style="max-width: 50%; height: auto;">
+            <img src="cid:stamp_image" alt="Booked" style="max-width: 50%; height: auto;">
         </div>
 
         <table style="width: 100%; border-collapse: collapse; background: #f9f9f9; border-radius: 8px; overflow: hidden;">
@@ -63,9 +63,22 @@
         </table>
 
         <div style="text-align: center; margin-top: 30px;">
-            <p style="font-size: 16px; color: #555;">Enjoy your movie! 🍿</p>
-            <p style="font-size: 18px; font-weight: bold; color: #0057ff;">Team BookMyShow</p>
+                <p style="font-size: 16px; color: #555;">Enjoy your movie! 🍿</p>
+                <p style="font-size: 18px; font-weight: bold; color: #0057ff;">Team Filmingo</p>
+
+                <a href="http://127.0.0.1:8000/invoice/{{ booking.id }}/" target="_blank" style="
+                    display: inline-block;
+                    padding: 12px 24px;
+                    background-color: #0057ff;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    margin-top: 20px;
+                ">
+                    ⬇️ Download Ticket (PDF)
+                </a>
+
         </div>
-    </div>
 </body>
 </html>

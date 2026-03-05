@@ -14,9 +14,17 @@ from datetime import timedelta
 import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+try:
+    from dotenv import load_dotenv
+    # Build paths inside the project like this: BASE_DIR / 'subdir'.
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    load_dotenv(BASE_DIR.parent / '.env')
+except ImportError:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    print("python-dotenv not found. Make sure environment variables are set.")
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -28,7 +36,7 @@ SECRET_KEY = 'django-insecure-g^!cy9e^tek^dts-($t+w3inu$4%!=34b-35ry-ui@-95n$sal
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
-CORS_ORIGIN_ALLOW_ALL =True
+CORS_ALLOW_ALL_ORIGINS =True
 CORS_ALLOW_METHODS =[
     "DELETE",
     "GET",
@@ -36,6 +44,10 @@ CORS_ALLOW_METHODS =[
     "PATCH",
     "POST",
     "PUT",
+]
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "ngrok-skip-browser-warning",
 ]
 # for custom user
 AUTH_USER_MODEL = 'ticket_booking.customUser'
@@ -158,7 +170,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [        
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-    ]
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
 }
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=2),
@@ -191,3 +206,16 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
+
+# Celery configuration
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+TMDB_API_KEY = os.getenv('TMDB_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', '')
+OMDB_API_KEY = os.getenv('OMDB_API_KEY', '')

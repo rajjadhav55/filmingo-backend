@@ -24,3 +24,10 @@ tzdata==2025.2
 weasyprint==65.1
 webencodings==0.5.1
 zopfli==0.2.3.post1
+celery==5.4.0
+redis==5.2.1
+google-genai
+requests
+python-dotenv
+cinemagoer
+beautifulsoup4
