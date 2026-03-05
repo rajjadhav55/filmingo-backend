@@ -1,0 +1,31 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+env/
+venv/
+newenv/
+.newenv/
+
+# Environment variables (CRITICAL)
+.env
+
+# Database
+*.sqlite3
+db.sqlite3
+
+# Django Static and Media files (Render will handle these)
+staticfiles/
+media/
+
+# VSCode and other editor configs
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Frontend node modules (just in case they sneak in)
+node_modules/
