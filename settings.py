@@ -25,7 +25,8 @@ ALLOWED_HOSTS = [
     ".onrender.com",           # Allows Render subdomains
     "filmingo.online",
     "www.filmingo.online",
-    'filmingo-backend-raj.herokuapp.com', # <-- HEROKU DOMAIN
+    'filmingo-backend-raj.herokuapp.com',
+    'filmingo-backend-raj-baafa2e5289f.herokuapp.com', # <-- HEROKU DOMAIN
 ]
 
 # CORS Configuration
