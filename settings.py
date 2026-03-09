@@ -57,6 +57,14 @@ EMAIL_HOST_USER = 'jadhavraj0501@gmail.com'
 EMAIL_HOST_PASSWORD = 'rufd tpax plii txrg'
 EMAIL_USE_TLS = True
 
+
+import os
+
+# The "Anti-Gravity" Redis connection
+# Heroku uses REDIS_URL, local testing uses localhost
+CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
 # Application definition
 INSTALLED_APPS = [
     'corsheaders',
