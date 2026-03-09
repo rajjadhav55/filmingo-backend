@@ -1259,3 +1259,5 @@ def recommendation_task_status(request, task_id):
 #         return JsonResponse({"error": str(e)}, status=500)
 
 #------------------------------------------------------------------------------------------------------------#
+
+print(os.getenv('DEBUG'))
