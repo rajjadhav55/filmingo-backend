@@ -92,4 +92,4 @@ webencodings==0.5.1
 websockets==15.0.1
 whitenoise==6.6.0
 zopfli==0.2.3.post1
-autotrace-py
+autotrace-py==0.1.1
