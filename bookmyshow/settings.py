@@ -14,11 +14,10 @@ from datetime import timedelta
 import os
 from pathlib import Path
 import dj_database_url
-
+from corsheaders.defaults import default_headers
 
 try:
     from dotenv import load_dotenv
-    # Build paths inside the project like this: BASE_DIR / 'subdir'.
     BASE_DIR = Path(__file__).resolve().parent.parent
     load_dotenv(BASE_DIR.parent / '.env')
 except ImportError:
@@ -27,19 +26,23 @@ except ImportError:
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
+OMDB_API_KEY = os.environ.get('OMDB_API_KEY', '')
+
+# AutoTrace Telemetry Configuration
+AUTOTRACE_CONFIG = {
+    "API_URL": os.environ.get("AUTOTRACE_API_URL", "https://autotrace-backend.onrender.com/api/errors/"),
+    "PROJECT_NAME": os.environ.get("AUTOTRACE_PROJECT_NAME", "bookmyshow"),
+    "API_KEY": os.environ.get("AUTOTRACE_API_KEY", ""),
+}
 
 # Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-g^!cy9e^tek^dts-($t+w3inu$4%!=34b-35ry-ui@-95n$sal')
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = ["*"]
-CORS_ALLOW_ALL_ORIGINS =True
-CORS_ALLOW_METHODS =[
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_METHODS = [
     "DELETE",
     "GET",
     "OPTIONS",
@@ -47,13 +50,15 @@ CORS_ALLOW_METHODS =[
     "POST",
     "PUT",
 ]
-from corsheaders.defaults import default_headers
+
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "ngrok-skip-browser-warning",
 ]
-# for custom user
+
+# Custom user model
 AUTH_USER_MODEL = 'ticket_booking.customUser'
 
+# Email settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
@@ -63,7 +68,6 @@ DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 EMAIL_USE_TLS = True
 
 # Application definition
-
 INSTALLED_APPS = [
     'corsheaders',
     'django.contrib.admin',
@@ -73,7 +77,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'ticket_booking',
-    #'rest_framework',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -85,7 +89,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    
+    'autotrace.middleware.AutoTraceMiddleware',  # AutoTrace Error Capture
 ]
 
 ROOT_URLCONF = 'bookmyshow.urls'
@@ -107,10 +111,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'bookmyshow.wsgi.application'
 
-
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
 DATABASES = {
     'default': dj_database_url.config(
         default='postgresql://postgres:rajjadhav2255@localhost:5432/bookmyshow_db', 
@@ -118,53 +119,28 @@ DATABASES = {
     )
 }
 
-
 # Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
+# Static & Media files
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-INSTALLED_APPS += ['rest_framework']
-
+# REST Framework & JWT
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [        
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -174,33 +150,28 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.AllowAny',
     ],
 }
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=2),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=50),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
-
     'ALGORITHM': 'HS256',
-
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,
     'JWK_URL': None,
     'LEEWAY': 0,
-
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
     'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
-
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
     'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
-
     'JTI_CLAIM': 'jti',
-
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
@@ -213,8 +184,3 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
-
-TMDB_API_KEY = os.getenv('TMDB_API_KEY')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', '')
-OMDB_API_KEY = os.getenv('OMDB_API_KEY', '')
