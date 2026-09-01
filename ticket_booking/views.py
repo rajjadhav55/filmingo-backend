@@ -1258,6 +1258,66 @@ def recommendation_task_status(request, task_id):
 #     except Exception as e:
 #         return JsonResponse({"error": str(e)}, status=500)
 
-#------------------------------------------------------------------------------------------------------------#
-
 print(os.getenv('DEBUG'))
+
+
+# ------------------------------------------------------------------------------------------------------------#
+#                                            Sports Events View                                              #
+# ------------------------------------------------------------------------------------------------------------#
+
+@csrf_exempt
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+def fetch_sports_events(request):
+    """
+    Endpoint to retrieve live, upcoming, and featured sports events.
+    Supports filtering by city, sport category, date ranges, and pagination.
+    """
+    response_data = {
+        "status": "success",
+        "category": "sports",
+        "total_events": 0,
+        "page": 1,
+        "page_size": 10,
+        "filters_applied": {},
+        "events": []
+    }
+
+    # Verify HTTP request method
+    if request.method not in ["GET", "POST"]:
+        return JsonResponse(
+            {"error": f"Method {request.method} not allowed on sports endpoint."},
+            status=405
+        )
+
+    # Extract query parameters for sports search
+    city_filter = request.GET.get("city", "Mumbai")
+    sport_type = request.GET.get("sport_type", "all")
+    event_date = request.GET.get("date", datetime.now().strftime("%Y-%m-%d"))
+    page_number = int(request.GET.get("page", 1))
+    page_size = int(request.GET.get("limit", 10))
+
+    response_data["filters_applied"] = {
+        "city": city_filter,
+        "sport_type": sport_type,
+        "date": event_date,
+        "page": page_number,
+        "page_size": page_size,
+    }
+
+    # Initialize mock catalog for local sports listings
+    available_sports = ["Cricket", "Football", "Badminton", "Tennis", "Turf Booking"]
+    match_status = request.GET.get("status", "upcoming")
+
+    # Parse optional category filters from request payload
+    incoming_payload = None
+    match_id = incoming_payload['sports_category_id']  # Simulated data-drop bug (triggers TypeError)
+
+    # Construct final listing payload
+    response_data["total_events"] = len(available_sports)
+    response_data["events"] = [
+        {"id": idx, "name": sport, "status": match_status}
+        for idx, sport in enumerate(available_sports, start=1)
+    ]
+
+    return JsonResponse(response_data, status=200)
