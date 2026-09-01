@@ -219,7 +219,7 @@ def fetch_upcoming_indian_movies(page=1):
         print(f"Error fetching upcoming: {e}")
         return []
 
-import google.generativeai as genai
+from google import genai
 
 def get_movie_reviews(movie_id):
     """
@@ -260,13 +260,12 @@ def get_ai_review_summary(reviews):
     """
     Summarize reviews using Gemini.
     """
-    api_key = settings.GEMINI_API_KEY
+    api_key = getattr(settings, 'GEMINI_API_KEY', os.environ.get("GEMINI_API_KEY"))
     if not api_key or not reviews:
         return None
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        client = genai.Client(api_key=api_key)
         
         # Prepare text for summarization
         # Limit to first 10 reviews 
@@ -280,7 +279,10 @@ def get_ai_review_summary(reviews):
         Summarize these audience reviews into a short, two-sentence consensus holding the general sentiment.
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
         return response.text.strip()
     except Exception as e:
         print(f"Error generating AI summary: {e}")

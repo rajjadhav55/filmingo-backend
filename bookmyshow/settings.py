@@ -30,11 +30,9 @@ RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY', '')
 OMDB_API_KEY = os.environ.get('OMDB_API_KEY', '')
 
 # AutoTrace Telemetry Configuration
-AUTOTRACE_CONFIG = {
-    "API_URL": os.environ.get("AUTOTRACE_API_URL", "https://autotrace-backend.onrender.com/api/errors/"),
-    "PROJECT_NAME": os.environ.get("AUTOTRACE_PROJECT_NAME", "bookmyshow"),
-    "API_KEY": os.environ.get("AUTOTRACE_API_KEY", ""),
-}
+AUTOTRACE_API_URL = os.environ.get("AUTOTRACE_API_URL", "https://autotrace-backend.onrender.com/api/errors/")
+AUTOTRACE_PROJECT_NAME = os.environ.get("AUTOTRACE_PROJECT_NAME", "filmingo")
+AUTOTRACE_API_KEY = os.environ.get("AUTOTRACE_API_KEY", "")
 
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-g^!cy9e^tek^dts-($t+w3inu$4%!=34b-35ry-ui@-95n$sal')

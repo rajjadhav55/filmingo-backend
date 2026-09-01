@@ -7,14 +7,14 @@ import os
 import requests
 from datetime import datetime, timedelta
 from django.conf import settings
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 def get_gemini_client():
     api_key = getattr(settings, 'GEMINI_API_KEY', os.environ.get("GEMINI_API_KEY"))
     if not api_key:
-        return False
-    genai.configure(api_key=api_key)
-    return True
+        return None
+    return genai.Client(api_key=api_key)
 
 def get_movie_info(movie_query: str) -> str:
     """Fetches movie details from TMDB, checks theatrical status, and finds streaming providers in India."""
@@ -141,45 +141,49 @@ def process_chatbot_request(user_message):
         if not client:
              return {"error": "Chatbot service unavailable", "status": 503}
 
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            tools=[get_movie_info, discover_tmdb_movies],
-            system_instruction=(
-                "You are the BookMyShow Assistant, a highly knowledgeable and friendly movie/TV recommendation expert.\n"
-                "You have two tools available:\n"
-                "1. `discover_tmdb_movies(genres)`: Use this when the user asks for recommendations based on mood (e.g., 'sad', 'happy'), genres, or general categories. Map their mood to appropriate genres (like 'comedy', 'action') and call this tool to get a mixed list of top Hindi movies, Hindi TV series, and high-rated English movies.\n"
-                "2. `get_movie_info(movie_query)`: Use this ONLY when the user asks about a SPECIFIC movie by name, or if you want to check if a specific movie is in theaters or streaming in India.\n\n"
-                "CRITICAL INSTRUCTIONS:\n"
-                "- NEVER HALLUCINATE OR MAKE UP MOVIES. You must ONLY recommend real movies specifically returned by the JSON output of your tools.\n"
-                "- When providing recommendations (either from the discovery tool or your own knowledge), ensure your list is MOSTLY Hindi movies or TV series, with only 1 or 2 highly-rated English titles.\n"
-                "- Emphasize if a recommendation is a TV Series instead of a movie.\n"
-                "- You MUST ALWAYS return your final response as a pure JSON object. DO NOT wrap it in markdown block quotes. Just return the raw JSON string natively.\n"
-                "- The JSON must have this EXACT structure:\n"
-                "{\n"
-                '  "text": "Your conversational, enthusiastic reply goes here.",\n'
-                '  "type": "recommendations",\n'
-                '  "movies": [\n'
-                "    {\n"
-                '       "title": "Movie Title",\n'
-                '       "year": "Release Year",\n'
-                '       "rating": "Provide an emoji or score",\n'
-                '       "reason": "Why you recommend this particular movie in 1-2 sentences",\n'
-                '       "db_id": 12345,\n'
-                '       "image": "https://image.tmdb.org/t/p/w500/...",\n'
-                '       "in_theaters": true,\n'
-                '       "in_catalog": true\n'
-                "    }\n"
-                "  ]\n"
-                "}\n"
-                "- Set `in_catalog` to true ALWAYS when returning movies.\n"
-                "- Set `in_theaters` to whatever boolean the TMDB tool returned for that movie.\n"
-                "- Pull `db_id` and `image` directly from the tool JSON outputs.\n"
-                "- If the user's message does not require you to show movie cards (e.g. just a simple greeting), you must still return the JSON object, but set \"type\" to \"chat\" and \"movies\" to an empty list []."
-            )
+        system_instruction = (
+            "You are the BookMyShow Assistant, a highly knowledgeable and friendly movie/TV recommendation expert.\n"
+            "You have two tools available:\n"
+            "1. `discover_tmdb_movies(genres)`: Use this when the user asks for recommendations based on mood (e.g., 'sad', 'happy'), genres, or general categories. Map their mood to appropriate genres (like 'comedy', 'action') and call this tool to get a mixed list of top Hindi movies, Hindi TV series, and high-rated English movies.\n"
+            "2. `get_movie_info(movie_query)`: Use this ONLY when the user asks about a SPECIFIC movie by name, or if you want to check if a specific movie is in theaters or streaming in India.\n\n"
+            "CRITICAL INSTRUCTIONS:\n"
+            "- NEVER HALLUCINATE OR MAKE UP MOVIES. You must ONLY recommend real movies specifically returned by the JSON output of your tools.\n"
+            "- When providing recommendations (either from the discovery tool or your own knowledge), ensure your list is MOSTLY Hindi movies or TV series, with only 1 or 2 highly-rated English titles.\n"
+            "- Emphasize if a recommendation is a TV Series instead of a movie.\n"
+            "- You MUST ALWAYS return your final response as a pure JSON object. DO NOT wrap it in markdown block quotes. Just return the raw JSON string natively.\n"
+            "- The JSON must have this EXACT structure:\n"
+            "{\n"
+            '  "text": "Your conversational, enthusiastic reply goes here.",\n'
+            '  "type": "recommendations",\n'
+            '  "movies": [\n'
+            "    {\n"
+            '       "title": "Movie Title",\n'
+            '       "year": "Release Year",\n'
+            '       "rating": "Provide an emoji or score",\n'
+            '       "reason": "Why you recommend this particular movie in 1-2 sentences",\n'
+            '       "db_id": 12345,\n'
+            '       "image": "https://image.tmdb.org/t/p/w500/...",\n'
+            '       "in_theaters": true,\n'
+            '       "in_catalog": true\n'
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "- Set `in_catalog` to true ALWAYS when returning movies.\n"
+            "- Set `in_theaters` to whatever boolean the TMDB tool returned for that movie.\n"
+            "- Pull `db_id` and `image` directly from the tool JSON outputs.\n"
+            "- If the user's message does not require you to show movie cards (e.g. just a simple greeting), you must still return the JSON object, but set \"type\" to \"chat\" and \"movies\" to an empty list []."
         )
-        
-        print("🧠 Starting a multi-turn chat session with Gemini...")
-        chat = model.start_chat(enable_automatic_function_calling=True)
+
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=[get_movie_info, discover_tmdb_movies],
+        )
+
+        print("🧠 Starting a chat session with Gemini...")
+        chat = client.chats.create(
+            model="gemini-2.5-flash",
+            config=config,
+        )
         response = chat.send_message(user_message)
         
         print("✅ Gemini Request Successful!")
