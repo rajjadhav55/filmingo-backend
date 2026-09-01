@@ -1,0 +1,45 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+env/
+venv/
+newenv/
+.newenv/
+ENV/
+
+# Environment variables (CRITICAL)
+.env
+.env.*
+
+# Database
+*.sqlite3
+db.sqlite3
+
+# Django Static and Media files
+staticfiles/
+media/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# Logs & Executables
+*.log
+*.exe
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+tempCodeRunnerFile.py
+
+# OS Files
+.DS_Store
+Thumbs.db
