@@ -1270,54 +1270,25 @@ print(os.getenv('DEBUG'))
 @permission_classes([AllowAny])
 def fetch_sports_events(request):
     """
-    Endpoint to retrieve live, upcoming, and featured sports events.
-    Supports filtering by city, sport category, date ranges, and pagination.
+    Endpoint to retrieve live, upcoming, and featured sports events (/api/sports/).
+    Triggered when the user clicks or navigates to the Sports category.
+    Intentionally raises a detailed unhandled TypeError so the AutoTrace SDK
+    background thread pool captures and dispatches the exception and stack trace
+    to the AutoTrace telemetry dashboard.
     """
-    response_data = {
-        "status": "success",
-        "category": "sports",
-        "total_events": 0,
-        "page": 1,
-        "page_size": 10,
-        "filters_applied": {},
-        "events": []
-    }
-
-    # Verify HTTP request method
-    if request.method not in ["GET", "POST"]:
-        return JsonResponse(
-            {"error": f"Method {request.method} not allowed on sports endpoint."},
-            status=405
-        )
-
-    # Extract query parameters for sports search
+    # Extract query parameters for sports search telemetry context
     city_filter = request.GET.get("city", "Mumbai")
     sport_type = request.GET.get("sport_type", "all")
     event_date = request.GET.get("date", datetime.now().strftime("%Y-%m-%d"))
-    page_number = int(request.GET.get("page", 1))
-    page_size = int(request.GET.get("limit", 10))
 
-    response_data["filters_applied"] = {
+    # Intentional unhandled exception: Unpack missing category configuration payload
+    # Simulates a null reference / missing dictionary payload bug
+    sports_category_payload = None
+    category_id = sports_category_payload["sports_category_id"]  # Triggers TypeError: 'NoneType' object is not subscriptable
+
+    return JsonResponse({
+        "status": "success",
         "city": city_filter,
         "sport_type": sport_type,
         "date": event_date,
-        "page": page_number,
-        "page_size": page_size,
-    }
-
-    # Initialize mock catalog for local sports listings
-    available_sports = ["Cricket", "Football", "Badminton", "Tennis", "Turf Booking"]
-    match_status = request.GET.get("status", "upcoming")
-
-    # Parse optional category filters from request payload
-    incoming_payload = None
-    match_id = incoming_payload['sports_category_id']  # Simulated data-drop bug (triggers TypeError)
-
-    # Construct final listing payload
-    response_data["total_events"] = len(available_sports)
-    response_data["events"] = [
-        {"id": idx, "name": sport, "status": match_status}
-        for idx, sport in enumerate(available_sports, start=1)
-    ]
-
-    return JsonResponse(response_data, status=200)
+    }, status=200)
