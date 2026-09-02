@@ -1,8 +1,9 @@
 import json
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.views.decorators.csrf import csrf_exempt
 from .models import Turf, TurfBooking
 from django.core.mail import EmailMessage
 from django.conf import settings
@@ -10,14 +11,19 @@ from django.utils.html import format_html
 from datetime import datetime
 from .sports_utils import get_turfs_from_osm, get_turf_details
 
+@csrf_exempt
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def turf_list(request):
     """
     API endpoint: /api/sports/turfs/?location=Palghar
     Returns a list of sports turfs in the requested location fetched from OSM.
+    Intentionally raises an unhandled ValueError for AutoTrace Telemetry.
     """
     location = request.GET.get('location', 'Mumbai')
-    turfs = get_turfs_from_osm(location)
-    return JsonResponse({'turfs': turfs})
+    raise ValueError(f"Simulated AutoTrace Telemetry Crash: Unhandled exception in sports turfs endpoint for location '{location}'")
+
 
 def turf_detail(request, turf_id):
     """

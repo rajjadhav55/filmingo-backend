@@ -1267,28 +1267,20 @@ print(os.getenv('DEBUG'))
 
 @csrf_exempt
 @api_view(["GET", "POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def fetch_sports_events(request):
     """
     Endpoint to retrieve live, upcoming, and featured sports events (/api/sports/).
     Triggered when the user clicks or navigates to the Sports category.
-    Intentionally raises a detailed unhandled TypeError so the AutoTrace SDK
+    Intentionally raises an unhandled runtime error so the AutoTrace SDK
     background thread pool captures and dispatches the exception and stack trace
-    to the AutoTrace telemetry dashboard.
+    to the AutoTrace telemetry dashboard instead of returning a 401 response.
     """
     # Extract query parameters for sports search telemetry context
     city_filter = request.GET.get("city", "Mumbai")
     sport_type = request.GET.get("sport_type", "all")
     event_date = request.GET.get("date", datetime.now().strftime("%Y-%m-%d"))
 
-    # Intentional unhandled exception: Unpack missing category configuration payload
-    # Simulates a null reference / missing dictionary payload bug
-    sports_category_payload = None
-    category_id = sports_category_payload["sports_category_id"]  # Triggers TypeError: 'NoneType' object is not subscriptable
-
-    return JsonResponse({
-        "status": "success",
-        "city": city_filter,
-        "sport_type": sport_type,
-        "date": event_date,
-    }, status=200)
+    # Intentional unhandled runtime exception for AutoTrace SDK telemetry capture
+    raise ValueError("Simulated AutoTrace Telemetry Crash: Unhandled exception in sports category endpoint")
