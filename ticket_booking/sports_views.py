@@ -22,7 +22,8 @@ def turf_list(request):
     Intentionally raises an unhandled ValueError for AutoTrace Telemetry.
     """
     location = request.GET.get('location', 'Mumbai')
-    raise ValueError(f"Simulated AutoTrace Telemetry Crash: Unhandled exception in sports turfs endpoint for location '{location}'")
+    turfs = get_turfs_from_osm(location)
+    return JsonResponse({'turfs': turfs})
 
 
 def turf_detail(request, turf_id):

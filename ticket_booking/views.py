@@ -1282,5 +1282,17 @@ def fetch_sports_events(request):
     sport_type = request.GET.get("sport_type", "all")
     event_date = request.GET.get("date", datetime.now().strftime("%Y-%m-%d"))
 
-    # Intentional unhandled runtime exception for AutoTrace SDK telemetry capture
-    raise ValueError("Simulated AutoTrace Telemetry Crash: Unhandled exception in sports category endpoint")
+    # Calculate pricing for Strike Arena Turf with mixed data types
+    turf_pricing = {"turf_id": "strike_arena", "base_price": 1200}
+    discount_applied = "200" # Accidentally defined as a string from a query param
+
+    # This will trigger a real TypeError: unsupported operand type(s) for -: 'int' and 'str'
+    final_price = turf_pricing["base_price"] - discount_applied
+
+    return JsonResponse({
+        "status": "success",
+        "city": city_filter,
+        "sport_type": sport_type,
+        "date": event_date,
+        "final_price": final_price,
+    }, status=200)
