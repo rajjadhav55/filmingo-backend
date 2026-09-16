@@ -1,4 +1,4 @@
-import os
+final_price = turf_pricing["base_price"] - int(discount_applied)
 import random
 import json , uuid
 from weasyprint import HTML
